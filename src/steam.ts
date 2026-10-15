@@ -19,6 +19,9 @@ export type MarketItem = {
   sell_listings: number; // how many are listed for sale right now
   sell_price: number; // cheapest listing, in US cents
   sell_price_text: string; // the same price as text, e.g. "$12.34"
+  asset_description?: {
+    icon_url?: string; // Steam's ID for the skin's picture
+  };
 };
 
 // The whole response for one page.

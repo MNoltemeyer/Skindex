@@ -1,4 +1,5 @@
-import { recordPrices } from "./db.js";
+import { getSkinIcons, recordPrices } from "./db.js";
+import { downloadMissingImages } from "./images.js";
 import { fetchAllFieldTestedAKs } from "./steam.js";
 
 // Turn 1234 cents into "$12.34".
@@ -13,7 +14,13 @@ const items = await fetchAllFieldTestedAKs();
 
 // A skin with nothing for sale has no price, so skip it instead of saving $0.00.
 const forSale = items.filter((item) => item.sell_listings > 0 && item.sell_price > 0);
-recordPrices(forSale.map((item) => ({ name: item.hash_name, priceCents: item.sell_price })));
+recordPrices(
+  forSale.map((item) => ({
+    name: item.hash_name,
+    priceCents: item.sell_price,
+    iconUrl: item.asset_description?.icon_url ?? null,
+  })),
+);
 
 const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
 console.log(`\nSaved prices for ${forSale.length} skins in ${seconds}s.`);
@@ -29,3 +36,12 @@ if (cheapest && priciest) {
   console.log(`Cheapest:       ${cheapest.hash_name}  ${formatPrice(cheapest.sell_price)}`);
   console.log(`Most expensive: ${priciest.hash_name}  ${formatPrice(priciest.sell_price)}`);
 }
+
+// Prices are already saved at this point, so a failed picture download
+// never loses price data.
+console.log("\nChecking skin pictures...");
+const images = await downloadMissingImages(getSkinIcons());
+console.log(
+  `Pictures: ${images.downloaded} downloaded, ${images.alreadyHad} already saved` +
+    (images.failed > 0 ? `, ${images.failed} failed (will retry next run)` : ""),
+);
