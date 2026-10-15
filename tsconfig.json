@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    // Which JavaScript version to output. Node 24 understands modern JS.
+    "target": "es2023",
+    "lib": ["es2023"],
+
+    // How imports/exports work. "nodenext" matches what Node.js does.
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+
+    // Where your source code lives, and where compiled JS goes.
+    "rootDir": "src",
+    "outDir": "dist",
+
+    // Strict mode: TypeScript catches more mistakes. Keep this on!
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+
+    // Small quality-of-life settings.
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "sourceMap": true,
+    "types": ["node"]
+  },
+  "include": ["src"]
+}
