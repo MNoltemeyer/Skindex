@@ -1,16 +1,31 @@
-import { getOrCreateSkin, getPriceHistory, recordPrice } from "./db.js";
+import { recordPrices } from "./db.js";
+import { fetchAllFieldTestedAKs } from "./steam.js";
 
 // Turn 1234 cents into "$12.34".
 function formatPrice(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-// A quick demo: save a made-up price, then print the history.
-// Later you'll replace the made-up price with a real one from a market API.
-const skin = getOrCreateSkin("AK-47 | Redline (Field-Tested)");
-recordPrice(skin.id, 1234);
+const startedAt = Date.now();
+console.log("Fetching Field-Tested AK-47 prices from the Steam Community Market...");
 
-console.log(`Price history for ${skin.market_hash_name}:`);
-for (const entry of getPriceHistory(skin.id)) {
-  console.log(`  ${entry.recorded_at}  ${formatPrice(entry.price_cents)}`);
+const items = await fetchAllFieldTestedAKs();
+
+// A skin with nothing for sale has no price, so skip it instead of saving $0.00.
+const forSale = items.filter((item) => item.sell_listings > 0 && item.sell_price > 0);
+recordPrices(forSale.map((item) => ({ name: item.hash_name, priceCents: item.sell_price })));
+
+const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+console.log(`\nSaved prices for ${forSale.length} skins in ${seconds}s.`);
+if (forSale.length < items.length) {
+  console.log(`Skipped ${items.length - forSale.length} with no listings.`);
+}
+
+// Show the cheapest and most expensive, as a quick check that the data looks right.
+const byPrice = [...forSale].sort((a, b) => a.sell_price - b.sell_price);
+const cheapest = byPrice[0];
+const priciest = byPrice[byPrice.length - 1];
+if (cheapest && priciest) {
+  console.log(`Cheapest:       ${cheapest.hash_name}  ${formatPrice(cheapest.sell_price)}`);
+  console.log(`Most expensive: ${priciest.hash_name}  ${formatPrice(priciest.sell_price)}`);
 }

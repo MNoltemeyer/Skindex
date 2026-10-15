@@ -52,6 +52,22 @@ export function recordPrice(skinId: number, priceCents: number, currency = "USD"
   );
 }
 
+// Save a price for every skin in one go. A "transaction" means either all of
+// them are saved, or (if something goes wrong halfway) none are.
+export function recordPrices(items: { name: string; priceCents: number }[]): void {
+  db.exec("BEGIN");
+  try {
+    for (const item of items) {
+      const skin = getOrCreateSkin(item.name);
+      recordPrice(skin.id, item.priceCents);
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
 // Get every saved price for a skin, oldest first.
 export function getPriceHistory(skinId: number): PriceRecord[] {
   const rows = db
