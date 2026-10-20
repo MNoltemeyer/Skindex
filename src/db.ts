@@ -69,7 +69,7 @@ const migrations: { version: number; description: string; run: () => void }[] = 
     description: "store prices by source, save listings, skin type and rarity, add an index",
     run() {
       db.exec(`
-        -- Where each price came from: 'steam' now, maybe 'csmoney' later.
+        -- Where each price came from: 'steam' now, maybe 'csfloat' later.
         -- Every price saved before this column existed came from Steam.
         ALTER TABLE prices ADD COLUMN source TEXT NOT NULL DEFAULT 'steam';
 

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { rename, writeFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { SkinIcon } from "./db.js";
+import { REQUEST_TIMEOUT_MS } from "./steam.js";
 
 // Pictures are saved here, one file per skin, named after the skin's id: "7.png".
 export const IMAGES_DIR = "data/images";
@@ -37,7 +38,9 @@ export async function downloadMissingImages(skins: SkinIcon[]): Promise<ImageDow
     }
 
     try {
-      const response = await fetch(`${IMAGE_URL}/${skin.icon_url}/${IMAGE_SIZE}`);
+      const response = await fetch(`${IMAGE_URL}/${skin.icon_url}/${IMAGE_SIZE}`, {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }

@@ -13,6 +13,10 @@ const DELAY_BETWEEN_PAGES_MS = 5_000;
 const RATE_LIMIT_WAIT_MS = 60_000;
 const MAX_ATTEMPTS = 3;
 
+// Give up on a request that gets no answer for this long, so a stuck
+// connection can't freeze updates forever.
+export const REQUEST_TIMEOUT_MS = 30_000;
+
 // One item in Steam's search results (only the fields we use).
 export type MarketItem = {
   hash_name: string; // unique name, e.g. "AK-47 | Redline (Field-Tested)"
@@ -52,7 +56,13 @@ async function fetchSearchPage(start: number): Promise<SearchResponse> {
   const url = `${SEARCH_URL}?${params}`;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const response = await fetch(url);
+    let response: Response;
+    try {
+      response = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    } catch {
+      // No internet, Steam is down, or it didn't answer in time.
+      throw new Error("Couldn't reach Steam");
+    }
 
     if (response.status === 429) {
       console.log(`  Steam says we're going too fast. Waiting ${RATE_LIMIT_WAIT_MS / 1000}s...`);

@@ -56,7 +56,7 @@ function escapeHtml(text) {
   return text.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
 }
 
-// The picture for an oval thumbnail. If there's no picture, or it fails to
+// The picture for a skin's thumbnail. If there's no picture, or it fails to
 // load, show the skin's first letter instead.
 function thumbnail(image, skinName) {
   const letter = escapeHtml(skinName.charAt(0));
@@ -84,7 +84,10 @@ function renderStatus(lastCheckedAt, updater, offline) {
     parts.push("Updating now…");
   } else if (updater?.lastError) {
     state = "error";
-    parts.push(`Last update failed (${updater.lastError}), will retry ${updater.nextUpdateAt ? timeUntil(new Date(updater.nextUpdateAt)) : "soon"}`);
+    // Steam is down or there's no internet. The prices on the page are the
+    // saved ones, so say that instead of showing it as a broken page.
+    parts.push(`${updater.lastError}, showing saved prices`);
+    parts.push(`Retrying ${updater.nextUpdateAt ? timeUntil(new Date(updater.nextUpdateAt)) : "soon"}`);
   } else if (updater?.nextUpdateAt) {
     parts.push(`Next update ${timeUntil(new Date(updater.nextUpdateAt))}`);
   }
