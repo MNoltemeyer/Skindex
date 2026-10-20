@@ -5,7 +5,6 @@
   --bg: #050607;
   --surface: #101214;
   --surface-hover: #15181b;
-  --thumb-glow: #22272b;
   --line: #1d2124;
   --text: #f3f5f6;
   --muted: #8a9096;
@@ -161,19 +160,22 @@ header { margin-bottom: 56px; }
   min-width: 0;
 }
 
-/* The small oval picture. If a skin has no picture, its first letter
-   is shown in the oval instead. */
+/* The skin's picture, in a wide box because rifles are long. Every row's box
+   is the same width, so the names line up. If a skin has no picture, its
+   first letter is shown instead.
+
+   Steam's pictures are squares with the rifle in a 2:1 strip across the
+   middle and empty, see-through space above and below. The box is 15:8
+   (a little taller than 2:1), and "object-fit: cover" scales the square to
+   the box's width without stretching it. So the whole rifle fits edge to
+   edge, and only the empty space above and below falls outside the box. */
 .thumb {
   position: relative;
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  width: 64px;
-  height: 44px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: radial-gradient(ellipse at center, var(--thumb-glow), var(--surface) 72%);
-  border: 1px solid var(--line);
+  width: 90px;
+  aspect-ratio: 15 / 8;
   color: var(--muted);
   font-size: 15px;
   font-weight: 600;
@@ -184,11 +186,10 @@ header { margin-bottom: 56px; }
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: scale(1.3); /* Steam's pictures have empty space around the rifle */
 }
 @media (max-width: 480px) {
   .left { gap: 12px; }
-  .thumb { width: 52px; height: 36px; }
+  .thumb { width: 72px; }
 }
 
 .name { min-width: 0; }
@@ -261,7 +262,7 @@ header { margin-bottom: 56px; }
   gap: 20px;
   margin-bottom: 20px;
 }
-.detail-title .thumb { width: 96px; height: 66px; font-size: 22px; }
+.detail-title .thumb { width: 150px; font-size: 22px; }
 .detail-title h1 {
   font-size: 28px;
   font-weight: 700;
@@ -271,7 +272,7 @@ header { margin-bottom: 56px; }
 .detail-title .sub { font-size: 14px; white-space: normal; }
 @media (max-width: 480px) {
   .detail-title { gap: 14px; }
-  .detail-title .thumb { width: 72px; height: 50px; }
+  .detail-title .thumb { width: 112px; }
   .detail-title h1 { font-size: 22px; }
 }
 
