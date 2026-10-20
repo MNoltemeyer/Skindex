@@ -4,12 +4,14 @@ node_modules/
 # Compiled output (recreate with `npm run build`)
 dist/
 
-# The SQLite database file holds your data, not code
+# Everything in data/ stays out of git (backups, pictures, SQLite's temporary
+# files), except the database itself, so the price history is saved to GitHub.
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
-data/
+data/*
+!data/skins.db
 
 # Secrets like API keys
 .env
