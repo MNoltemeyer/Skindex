@@ -62,6 +62,32 @@
     .hero-change { font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; }
     .hero-meta { color: var(--muted); font-size: 14px; margin-top: 16px; }
 
+    /* "Prices updated ... · Next update in ..." with a colored dot in front */
+    .status {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 6px;
+      line-height: 1.5;
+    }
+    .status .dot {
+      flex-shrink: 0;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--up);
+      transform: translateY(-1px);
+    }
+    .status.updating .dot { animation: pulse 1.2s ease-in-out infinite; }
+    .status.error .dot { background: var(--down); }
+    .status.error { color: var(--text); }
+    @keyframes pulse { 50% { opacity: 0.25; } }
+    @media (prefers-reduced-motion: reduce) {
+      .status.updating .dot { animation: none; }
+    }
+
     /* Search box and sort buttons */
     .controls {
       display: flex;
@@ -226,6 +252,10 @@
       <div class="hero-value" id="total">—</div>
       <div class="hero-change" id="total-change"></div>
       <div class="hero-meta" id="meta">Loading prices…</div>
+      <div class="status" id="status" hidden>
+        <span class="dot"></span>
+        <span id="status-text"></span>
+      </div>
     </section>
 
     <div class="controls">
@@ -244,8 +274,12 @@
   <script>
     // What the page is currently showing.
     let skins = [];
+    let updater = null; // the server's timer: { updating, nextUpdateAt, lastError }
     let query = "";
     let sortBy = "name";
+
+    // How often the page asks the server for fresh data: 1 minute.
+    const REFRESH_EVERY_MS = 60 * 1000;
 
     const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
@@ -263,9 +297,28 @@
     }
 
     // SQLite saves times like "2026-10-15 02:14:17" in UTC. Show them in your local time.
+    function parseSqliteTime(sqliteTime) {
+      return new Date(sqliteTime.replace(" ", "T") + "Z");
+    }
     function formatTime(sqliteTime) {
-      const date = new Date(sqliteTime.replace(" ", "T") + "Z");
-      return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+      return parseSqliteTime(sqliteTime).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+    }
+
+    // "just now", "3 min ago", "2 hr ago", "4 days ago"
+    function timeAgo(date) {
+      const minutes = Math.floor((Date.now() - date.getTime()) / 60000);
+      if (minutes < 1) return "just now";
+      if (minutes < 60) return `${minutes} min ago`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours} hr ago`;
+      const days = Math.floor(hours / 24);
+      return days === 1 ? "1 day ago" : `${days} days ago`;
+    }
+
+    // "in 7 min", or "in less than a minute"
+    function timeUntil(date) {
+      const minutes = Math.ceil((date.getTime() - Date.now()) / 60000);
+      return minutes <= 1 ? "in less than a minute" : `in ${minutes} min`;
     }
 
     // Split "AK-47 | Redline (Field-Tested)" into its parts.
@@ -300,14 +353,42 @@
       const first = skins.reduce((sum, s) => sum + s.firstCents, 0);
       const change = formatChange(latest - first, ((latest - first) / first) * 100);
       const firstCheck = skins.reduce((min, s) => (s.firstCheckedAt < min ? s.firstCheckedAt : min), skins[0].firstCheckedAt);
-      const lastCheck = skins.reduce((max, s) => (s.lastCheckedAt > max ? s.lastCheckedAt : max), skins[0].lastCheckedAt);
 
       document.getElementById("total").textContent = formatMoney(latest);
       const changeEl = document.getElementById("total-change");
       changeEl.textContent = `${change.text} since ${formatTime(firstCheck)}`;
       changeEl.className = `hero-change ${change.color}`;
-      document.getElementById("meta").textContent =
-        `Cost of one of each of ${skins.length} skins · Updated ${formatTime(lastCheck)}`;
+      document.getElementById("meta").textContent = `Cost of one of each of ${skins.length} skins`;
+    }
+
+    // The line under the summary: when prices were last updated, and what
+    // the server's timer is doing. `offline` means the last refresh failed.
+    function renderStatus(offline) {
+      const parts = [];
+      let state = "";
+
+      if (skins.length > 0) {
+        const lastCheck = skins.reduce((max, s) => (s.lastCheckedAt > max ? s.lastCheckedAt : max), skins[0].lastCheckedAt);
+        parts.push(`Prices updated ${formatTime(lastCheck)} (${timeAgo(parseSqliteTime(lastCheck))})`);
+      }
+
+      if (offline) {
+        state = "error";
+        parts.push("Can't reach the Skindex server, retrying every minute");
+      } else if (updater?.updating) {
+        state = "updating";
+        parts.push("Updating now…");
+      } else if (updater?.lastError) {
+        state = "error";
+        parts.push(`Last update failed (${updater.lastError}), will retry ${updater.nextUpdateAt ? timeUntil(new Date(updater.nextUpdateAt)) : "soon"}`);
+      } else if (updater?.nextUpdateAt) {
+        parts.push(`Next update ${timeUntil(new Date(updater.nextUpdateAt))}`);
+      }
+
+      const status = document.getElementById("status");
+      status.hidden = parts.length === 0;
+      status.className = `status ${state}`;
+      document.getElementById("status-text").textContent = parts.join(" · ");
     }
 
     function renderList() {
@@ -366,29 +447,44 @@
 
     // Ask our server for the data, then draw the page.
     async function load() {
+      let data;
       try {
         const response = await fetch("/api/skins");
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        skins = await response.json();
+        data = await response.json();
       } catch (error) {
-        document.getElementById("meta").textContent = "Couldn't load prices.";
-        document.getElementById("list").innerHTML =
-          `<li class="message">Couldn't reach the Skindex server. Is <code>npm run web</code> still running?</li>`;
+        if (skins.length > 0) {
+          // Keep showing the prices we already have, and say we're offline.
+          renderStatus(true);
+        } else {
+          document.getElementById("meta").textContent = "Couldn't load prices.";
+          document.getElementById("list").innerHTML =
+            `<li class="message">Couldn't reach the Skindex server. Is <code>npm run web</code> still running?</li>`;
+        }
         return;
       }
 
+      skins = data.skins;
+      updater = data.updater;
+
       if (skins.length === 0) {
         document.getElementById("meta").textContent = "No prices yet.";
-        document.getElementById("list").innerHTML =
-          `<li class="message">No prices saved yet. Run <code>npm start</code> to fetch them, then refresh this page.</li>`;
+        document.getElementById("list").innerHTML = updater?.updating
+          ? `<li class="message">Fetching the first prices from Steam. This takes about 30 seconds, and the page will fill in by itself.</li>`
+          : `<li class="message">No prices saved yet. They'll appear after the server's next update.</li>`;
+        renderStatus(false);
         return;
       }
 
       renderSummary();
-      renderList();
+      renderStatus(false);
+      renderList(); // keeps your search text and sort choice
     }
 
+    // Load now, then again every minute. The server saves new prices every
+    // 10 minutes, so the page shows them within a minute of being saved.
     load();
+    setInterval(load, REFRESH_EVERY_MS);
   </script>
 </body>
 </html>

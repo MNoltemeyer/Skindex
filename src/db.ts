@@ -9,6 +9,10 @@ export const db = new DatabaseSync("data/skins.db");
 // saving new prices, without either one having to wait for the other.
 db.exec("PRAGMA journal_mode = WAL");
 
+// If the database is busy for a moment (another program is saving), wait up
+// to 5 seconds for it instead of failing straight away.
+db.exec("PRAGMA busy_timeout = 5000");
+
 // Create the tables the first time the app runs.
 // "IF NOT EXISTS" means running this again is harmless.
 db.exec(`
@@ -24,6 +28,14 @@ db.exec(`
     price_cents INTEGER NOT NULL,          -- store money as whole cents to avoid rounding errors
     currency    TEXT NOT NULL DEFAULT 'USD',
     recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- At most one row (id must be 1). If the row exists, an update is running,
+  -- and pid says which program is running it.
+  CREATE TABLE IF NOT EXISTS update_lock (
+    id         INTEGER PRIMARY KEY CHECK (id = 1),
+    pid        INTEGER NOT NULL,
+    started_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
 
@@ -135,6 +147,54 @@ export function getSkinSummaries(): SkinSummary[] {
     const changeCents = row.latestCents - row.firstCents;
     return { ...row, changeCents, changePercent: (changeCents / row.firstCents) * 100 };
   });
+}
+
+// Is the program with this process ID (pid) still running?
+// process.kill(pid, 0) doesn't stop anything; it only checks the program exists.
+function isProcessRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM means it exists but belongs to another user, so it's still running.
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+// Try to claim the update lock. Returns true if we got it, false if another
+// update is already running (in this program or another one, like npm start).
+// The lock lives in the database because that's the one thing the web server
+// and npm start share.
+export function tryLockUpdates(): boolean {
+  // "IMMEDIATE" makes other programs wait until we're done checking and
+  // claiming, so two programs can't both see "no lock" at the same moment.
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const lock = db.prepare("SELECT pid FROM update_lock WHERE id = 1").get() as
+      | { pid: number }
+      | undefined;
+
+    // A lock from a program that has stopped (say it crashed, or you pressed
+    // Ctrl+C mid-update) is left over, so it's safe to take over.
+    if (lock && isProcessRunning(lock.pid)) {
+      db.exec("COMMIT");
+      return false;
+    }
+
+    db.prepare(
+      "INSERT OR REPLACE INTO update_lock (id, pid, started_at) VALUES (1, ?, datetime('now'))",
+    ).run(process.pid);
+    db.exec("COMMIT");
+    return true;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+// Give the lock back so the next update can run.
+export function unlockUpdates(): void {
+  db.prepare("DELETE FROM update_lock WHERE id = 1 AND pid = ?").run(process.pid);
 }
 
 // Get every saved price for a skin, oldest first.

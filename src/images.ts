@@ -13,13 +13,19 @@ const IMAGE_SIZE = "128fx128f";
 // A short pause between downloads, to be polite to Steam's servers.
 const DELAY_BETWEEN_DOWNLOADS_MS = 200;
 
+export type ImageDownloadResult = {
+  downloaded: number;
+  failed: number;
+  alreadyHad: number;
+};
+
 export function imagePath(skinId: number): string {
   return `${IMAGES_DIR}/${skinId}.png`;
 }
 
 // Download the picture for every skin that doesn't have one saved yet.
 // Pictures we already have are skipped, so after the first run this is quick.
-export async function downloadMissingImages(skins: SkinIcon[]) {
+export async function downloadMissingImages(skins: SkinIcon[]): Promise<ImageDownloadResult> {
   mkdirSync(IMAGES_DIR, { recursive: true });
   const missing = skins.filter((skin) => !existsSync(imagePath(skin.id)));
   let downloaded = 0;

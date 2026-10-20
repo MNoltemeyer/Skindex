@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { getUpdaterStatus, startAutoUpdates } from "./autoUpdate.js";
 import { getSkinSummaries } from "./db.js";
 import { imagePath } from "./images.js";
 
@@ -30,7 +31,7 @@ const server = createServer(async (request, response) => {
         image: existsSync(imagePath(skin.id)) ? `/images/${skin.id}.png` : null,
       }));
       response.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-      response.end(JSON.stringify(skins));
+      response.end(JSON.stringify({ skins, updater: getUpdaterStatus() }));
       return;
     }
 
@@ -74,4 +75,8 @@ server.on("error", (error: NodeJS.ErrnoException) => {
 server.listen(PORT, HOST, () => {
   console.log(`Skindex is running at http://localhost:${PORT}`);
   console.log("Press Ctrl+C to stop it.");
+
+  // Only start updating once the server is up. If the port was taken, the
+  // "error" handler above stops the program before we get here.
+  startAutoUpdates();
 });
