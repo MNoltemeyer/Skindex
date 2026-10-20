@@ -32,10 +32,14 @@ export async function runUpdate(): Promise<UpdateResult | null> {
     // A skin with nothing for sale has no price, so skip it instead of saving $0.00.
     const forSale = items.filter((item) => item.sell_listings > 0 && item.sell_price > 0);
     recordPrices(
+      "steam",
       forSale.map((item) => ({
         name: item.hash_name,
         priceCents: item.sell_price,
+        listings: item.sell_listings,
         iconUrl: item.asset_description?.icon_url ?? null,
+        itemType: item.asset_description?.type ?? null,
+        rarityColor: item.asset_description?.name_color ?? null,
       })),
     );
 

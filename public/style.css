@@ -1,0 +1,372 @@
+/* Styles shared by every Skindex page. */
+
+/* Colors and sizes in one place, so they're easy to change. */
+:root {
+  --bg: #050607;
+  --surface: #101214;
+  --surface-hover: #15181b;
+  --thumb-glow: #22272b;
+  --line: #1d2124;
+  --text: #f3f5f6;
+  --muted: #8a9096;
+  --up: #3ddc97;
+  --down: #ff6159;
+  --radius: 14px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+/* Make sure anything marked "hidden" stays hidden, even if a style below
+   gives it a display value like flex. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 16px 96px;
+}
+
+a { color: inherit; }
+
+:focus-visible {
+  outline: 2px solid var(--up);
+  outline-offset: 2px;
+}
+
+/* Header with logo and name */
+header { margin-bottom: 56px; }
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  border-radius: 10px;
+}
+.brand-link img { width: 36px; height: 36px; }
+.brand { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+
+/* The big number at the top */
+.hero-label { color: var(--muted); font-size: 15px; font-weight: 500; }
+.hero-value {
+  font-size: clamp(40px, 9vw, 56px);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  margin: 8px 0 6px;
+}
+.hero-change { font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.hero-meta { color: var(--muted); font-size: 14px; margin-top: 16px; }
+
+/* "Prices updated ... · Next update in ..." with a colored dot in front */
+.status {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
+  margin-top: 6px;
+  line-height: 1.5;
+}
+.status .dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--up);
+  transform: translateY(-1px);
+}
+.status.updating .dot { animation: pulse 1.2s ease-in-out infinite; }
+.status.error .dot { background: var(--down); }
+.status.error { color: var(--text); }
+@keyframes pulse { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) {
+  .status.updating .dot { animation: none; }
+}
+
+/* Rounded "pill" button groups: the sort buttons and the chart's range buttons */
+.pills {
+  display: flex;
+  width: fit-content;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px;
+}
+.pills button {
+  background: none;
+  border: 0;
+  border-radius: 999px;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 14px;
+  white-space: nowrap;
+}
+.pills button:hover { color: var(--text); }
+.pills button[aria-pressed="true"] { background: var(--up); color: #04150d; }
+
+/* Search box */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 56px 0 8px;
+}
+.search {
+  flex: 1 1 240px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  padding: 12px 18px;
+  outline: none;
+}
+.search::placeholder { color: var(--muted); }
+.search:focus { border-color: var(--up); }
+
+.count { color: var(--muted); font-size: 13px; margin: 20px 0 8px; }
+
+/* The list of skins */
+.list { list-style: none; margin: 0; padding: 0; }
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 12px;
+  margin: 0 -12px;
+  border-radius: var(--radius);
+  color: inherit;
+  text-decoration: none;
+}
+.list li + li { border-top: 1px solid var(--line); }
+.row:hover { background: var(--surface-hover); }
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* The small oval picture. If a skin has no picture, its first letter
+   is shown in the oval instead. */
+.thumb {
+  position: relative;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: radial-gradient(ellipse at center, var(--thumb-glow), var(--surface) 72%);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+}
+.thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.3); /* Steam's pictures have empty space around the rifle */
+}
+@media (max-width: 480px) {
+  .left { gap: 12px; }
+  .thumb { width: 52px; height: 36px; }
+}
+
+.name { min-width: 0; }
+.skin {
+  font-size: 17px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sub {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.numbers { text-align: right; flex-shrink: 0; }
+.price {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.change {
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.up { color: var(--up); }
+.down { color: var(--down); }
+.flat { color: var(--muted); }
+
+.message {
+  color: var(--muted);
+  text-align: center;
+  padding: 64px 16px;
+  line-height: 1.6;
+}
+.message code {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 2px 6px;
+}
+
+/* ------------------------------------------------------------------------
+   Skin detail page
+   ------------------------------------------------------------------------ */
+
+.back {
+  display: inline-block;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  margin-bottom: 24px;
+  border-radius: 6px;
+}
+.back:hover { color: var(--text); }
+
+.detail-title {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+.detail-title .thumb { width: 96px; height: 66px; font-size: 22px; }
+.detail-title h1 {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.detail-title .sub { font-size: 14px; white-space: normal; }
+@media (max-width: 480px) {
+  .detail-title { gap: 14px; }
+  .detail-title .thumb { width: 72px; height: 50px; }
+  .detail-title h1 { font-size: 22px; }
+}
+
+.section { margin-top: 56px; }
+.section h2 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 4px;
+}
+.section .section-sub { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+
+/* The chart */
+.chart-readout {
+  min-height: 24px;
+  font-size: 15px;
+  margin: 20px 0 8px;
+  font-variant-numeric: tabular-nums;
+}
+.chart-readout strong { font-weight: 600; }
+.chart-readout .when { color: var(--muted); }
+
+.chart {
+  position: relative;
+  height: 300px;
+  touch-action: pan-y;
+}
+.chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.chart svg:focus-visible { outline: none; }
+.chart:has(svg:focus-visible) { outline: 2px solid var(--up); outline-offset: 4px; border-radius: 6px; }
+.chart .message { padding: 120px 16px 0; }
+.chart-axis { fill: var(--muted); font-size: 12px; font-family: inherit; }
+@media (max-width: 480px) { .chart { height: 220px; } .chart .message { padding-top: 80px; } }
+
+/* Small stat tiles: listings, lowest/highest seen, and so on */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+@media (max-width: 560px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+.stat { background: var(--bg); padding: 18px 20px; min-width: 0; }
+@media (max-width: 480px) { .stat { padding: 16px; } .stat-value { font-size: 18px; } }
+.stat-label { color: var(--muted); font-size: 13px; font-weight: 500; }
+.stat-value { font-size: 20px; font-weight: 600; margin-top: 6px; letter-spacing: -0.01em; }
+.stat-note { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.rarity-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: 1px;
+}
+
+.external {
+  display: inline-block;
+  margin-top: 20px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  border-radius: 6px;
+}
+.external:hover { color: var(--text); text-decoration: underline; }
+
+/* The price table under the chart */
+.history { margin-top: 24px; }
+.history summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 6px;
+  width: fit-content;
+}
+.history summary:hover { color: var(--text); }
+.history table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 16px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.history th {
+  color: var(--muted);
+  font-weight: 500;
+  text-align: left;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.history td { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.history th:not(:first-child), .history td:not(:first-child) { text-align: right; }
+.history .table-note { color: var(--muted); font-size: 13px; margin-top: 12px; }

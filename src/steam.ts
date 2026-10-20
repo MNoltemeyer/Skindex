@@ -21,6 +21,8 @@ export type MarketItem = {
   sell_price_text: string; // the same price as text, e.g. "$12.34"
   asset_description?: {
     icon_url?: string; // Steam's ID for the skin's picture
+    type?: string; // e.g. "Covert Rifle"
+    name_color?: string; // the rarity color, e.g. "eb4b4b" (red for Covert)
   };
 };
 

@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skindex</title>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="page">
+    <header>
+      <a class="brand-link" href="/">
+        <img src="/logo.svg" alt="">
+        <span class="brand">Skindex</span>
+      </a>
+    </header>
+
+    <a class="back" href="/">← All skins</a>
+
+    <div class="message" id="page-message" hidden></div>
+
+    <div id="content" hidden>
+      <!-- Top: picture, name, price, change since the first check -->
+      <section>
+        <div class="detail-title">
+          <div class="thumb" id="thumb" aria-hidden="true"></div>
+          <div>
+            <h1 id="skin-name">Loading…</h1>
+            <div class="sub" id="skin-sub"></div>
+          </div>
+        </div>
+        <div class="hero-value" id="price">—</div>
+        <div class="hero-change" id="change"></div>
+        <div class="status" id="status" hidden>
+          <span class="dot"></span>
+          <span id="status-text"></span>
+        </div>
+      </section>
+
+      <!-- The chart, with its range buttons above it -->
+      <section class="section">
+        <div class="pills" role="group" aria-label="Chart time range">
+          <button type="button" data-range="1d" aria-pressed="false">1 day</button>
+          <button type="button" data-range="1w" aria-pressed="false">1 week</button>
+          <button type="button" data-range="all" aria-pressed="true">All time</button>
+        </div>
+        <div class="chart-readout" id="readout" aria-live="polite"></div>
+        <div class="chart" id="chart"></div>
+
+        <!-- The same prices as a table, so they can be read without the chart -->
+        <details class="history" id="history">
+          <summary id="history-summary">Price table</summary>
+          <div id="history-body"></div>
+        </details>
+      </section>
+
+      <!-- What we've saved from Steam for this skin -->
+      <section class="section">
+        <h2 id="source-name">Steam Community Market</h2>
+        <p class="section-sub">What we've saved from this source for this skin</p>
+        <div class="stats" id="stats"></div>
+        <a class="external" id="source-link" href="#" target="_blank" rel="noopener">View on Steam Market ↗</a>
+      </section>
+    </div>
+  </main>
+
+  <!-- Shared helpers (formatMoney, renderStatus, ...) used by the script below -->
+  <script src="/common.js"></script>
+  <script>
+    // The skin's id is the last part of this page's address: /skin/7 → 7
+    const skinId = Number(location.pathname.split("/").pop());
+
+    const RANGES = {
+      "1d": { ms: 24 * 60 * 60 * 1000, label: "past day" },
+      "1w": { ms: 7 * 24 * 60 * 60 * 1000, label: "past week" },
+      all: { ms: Infinity, label: "all time" },
+    };
+
+    // What the page is currently showing.
+    let data = null; // { skin, source, history, updater } from the server
+    let points = []; // every saved price, oldest first, with its time as a number
+    let range = "all";
+    let chart = null; // the drawn chart's points and positions, for hovering
+    let hoverIndex = null; // which point the crosshair is on, or null
+
+    // ---------- Top of the page ----------
+
+    function renderHeader() {
+      const { skin } = data;
+      const parts = splitName(skin.name);
+      document.title = `${parts.skin} · Skindex`;
+      document.getElementById("thumb").innerHTML = thumbnail(skin.image, parts.skin);
+      document.getElementById("skin-name").textContent = parts.skin;
+      document.getElementById("skin-sub").textContent =
+        [parts.weapon, parts.wear, skin.itemType].filter(Boolean).join(" · ");
+
+      const first = points[0];
+      const latest = points[points.length - 1];
+      document.getElementById("price").textContent = formatMoney(latest.priceCents);
+      const diff = latest.priceCents - first.priceCents;
+      const change = formatChange(diff, (diff / first.priceCents) * 100);
+      const changeEl = document.getElementById("change");
+      changeEl.textContent = `${change.text} since first check on ${formatTime(first.recordedAt)}`;
+      changeEl.className = `hero-change ${change.color}`;
+    }
+
+    // ---------- The chart ----------
+
+    function pointsInRange() {
+      const cutoff = Date.now() - RANGES[range].ms;
+      return points.filter((p) => p.t >= cutoff);
+    }
+
+    // Build a smooth SVG line through the points. This is "monotone" curve
+    // smoothing: the curve bends smoothly between points but never bulges
+    // above the highest or below the lowest neighboring price, so it never
+    // shows a price that didn't happen.
+    function smoothPath(xy) {
+      const n = xy.length;
+      if (n < 3) return "M" + xy.map((p) => p.join(",")).join("L");
+
+      const sign = (v) => (v < 0 ? -1 : 1);
+      const slopes = []; // how steep the line is at each point
+      for (let i = 1; i < n - 1; i++) {
+        const h0 = xy[i][0] - xy[i - 1][0];
+        const h1 = xy[i + 1][0] - xy[i][0];
+        const s0 = h0 ? (xy[i][1] - xy[i - 1][1]) / h0 : 0;
+        const s1 = h1 ? (xy[i + 1][1] - xy[i][1]) / h1 : 0;
+        const p = h0 + h1 ? (s0 * h1 + s1 * h0) / (h0 + h1) : 0;
+        slopes[i] = (sign(s0) + sign(s1)) * Math.min(Math.abs(s0), Math.abs(s1), 0.5 * Math.abs(p)) || 0;
+      }
+      const end = (i, j, k) => {
+        const h = xy[j][0] - xy[i][0];
+        return h ? (3 * (xy[j][1] - xy[i][1]) / h - slopes[k]) / 2 : slopes[k];
+      };
+      slopes[0] = end(0, 1, 1);
+      slopes[n - 1] = end(n - 2, n - 1, n - 2);
+
+      let d = `M${xy[0][0]},${xy[0][1]}`;
+      for (let i = 0; i < n - 1; i++) {
+        const [x0, y0] = xy[i];
+        const [x1, y1] = xy[i + 1];
+        const dx = (x1 - x0) / 3;
+        d += `C${x0 + dx},${y0 + slopes[i] * dx},${x1 - dx},${y1 - slopes[i + 1] * dx},${x1},${y1}`;
+      }
+      return d;
+    }
+
+    // Short time labels for the chart's axis: times for 1 day, dates otherwise.
+    function axisLabel(t) {
+      const options = range === "1d" ? { timeStyle: "short" } : { month: "short", day: "numeric" };
+      return new Date(t).toLocaleString(undefined, options);
+    }
+
+    function drawChart() {
+      const box = document.getElementById("chart");
+      const shown = pointsInRange();
+      chart = null;
+      hoverIndex = null;
+
+      if (shown.length < 2) {
+        const label = RANGES[range].label;
+        box.innerHTML = `<div class="message">${
+          shown.length === 0
+            ? `No prices saved in the ${label}. Prices are only saved while <code>npm run web</code> is running.`
+            : `Only one price saved in the ${label} so far. The line appears after the next update.`
+        }</div>`;
+        renderReadout();
+        return;
+      }
+
+      const width = box.clientWidth;
+      const height = box.clientHeight;
+      const pad = { top: 12, right: 64, bottom: 28, left: 0 }; // room for the axis labels
+      const plotRight = width - pad.right;
+
+      const prices = shown.map((p) => p.priceCents);
+      const minPrice = Math.min(...prices);
+      const maxPrice = Math.max(...prices);
+      // A little space above and below the line, so it doesn't touch the edges.
+      let lo = minPrice;
+      let hi = maxPrice;
+      if (lo === hi) { lo -= 1; hi += 1; }
+      const space = (hi - lo) * 0.1;
+      lo -= space;
+      hi += space;
+
+      const t0 = shown[0].t;
+      const t1 = shown[shown.length - 1].t;
+      const x = (t) => pad.left + ((t - t0) / (t1 - t0)) * (plotRight - pad.left);
+      const y = (cents) => pad.top + ((hi - cents) / (hi - lo)) * (height - pad.top - pad.bottom);
+      const xy = shown.map((p) => [x(p.t), y(p.priceCents)]);
+
+      // Green if the price went up over this range, red if down, gray if flat.
+      const diff = shown[shown.length - 1].priceCents - shown[0].priceCents;
+      const color = diff > 0 ? "var(--up)" : diff < 0 ? "var(--down)" : "var(--muted)";
+      const startY = y(shown[0].priceCents);
+
+      const priceLabels = minPrice === maxPrice
+        ? `<text class="chart-axis" x="${plotRight + 10}" y="${y(maxPrice) + 4}">${formatMoney(maxPrice)}</text>`
+        : `<text class="chart-axis" x="${plotRight + 10}" y="${y(maxPrice) + 4}">${formatMoney(maxPrice)}</text>
+           <text class="chart-axis" x="${plotRight + 10}" y="${y(minPrice) + 4}">${formatMoney(minPrice)}</text>`;
+
+      box.innerHTML = `
+        <svg tabindex="0" role="img"
+             aria-label="Price chart for the ${RANGES[range].label}: from ${formatMoney(shown[0].priceCents)} to ${formatMoney(shown[shown.length - 1].priceCents)}. Use the left and right arrow keys to read each saved price.">
+          <!-- a faint line at the price where this range starts -->
+          <line x1="${pad.left}" x2="${plotRight}" y1="${startY}" y2="${startY}" stroke="var(--line)" stroke-width="1" />
+          <path d="${smoothPath(xy)}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+          ${priceLabels}
+          <text class="chart-axis" x="${pad.left}" y="${height - 6}">${axisLabel(t0)}</text>
+          <text class="chart-axis" x="${plotRight}" y="${height - 6}" text-anchor="end">${axisLabel(t1)}</text>
+          <!-- the hover crosshair and dot, hidden until you point at the chart -->
+          <line id="crosshair" y1="${pad.top}" y2="${height - pad.bottom}" stroke="var(--muted)" stroke-width="1" visibility="hidden" />
+          <circle id="marker" r="5" fill="${color}" stroke="var(--bg)" stroke-width="2" visibility="hidden" />
+        </svg>`;
+
+      chart = { shown, xy, diff };
+      const svg = box.querySelector("svg");
+
+      // Mouse and touch: snap to the saved price closest to the pointer.
+      svg.addEventListener("pointermove", (event) => {
+        const pointerX = event.clientX - svg.getBoundingClientRect().left;
+        let nearest = 0;
+        for (let i = 1; i < xy.length; i++) {
+          if (Math.abs(xy[i][0] - pointerX) < Math.abs(xy[nearest][0] - pointerX)) nearest = i;
+        }
+        setHover(nearest);
+      });
+      svg.addEventListener("pointerleave", () => setHover(null));
+
+      // Keyboard: arrow keys step through the saved prices.
+      svg.addEventListener("keydown", (event) => {
+        const last = xy.length - 1;
+        let next = null;
+        if (event.key === "ArrowLeft") next = hoverIndex === null ? last : Math.max(0, hoverIndex - 1);
+        else if (event.key === "ArrowRight") next = hoverIndex === null ? last : Math.min(last, hoverIndex + 1);
+        else if (event.key === "Home") next = 0;
+        else if (event.key === "End") next = last;
+        else if (event.key === "Escape") { setHover(null); return; }
+        else return;
+        event.preventDefault();
+        setHover(next);
+      });
+      svg.addEventListener("blur", () => setHover(null));
+
+      renderReadout();
+    }
+
+    function setHover(index) {
+      hoverIndex = index;
+      const svg = document.querySelector("#chart svg");
+      if (!svg || !chart) return;
+      const crosshair = svg.getElementById("crosshair");
+      const marker = svg.getElementById("marker");
+      if (index === null) {
+        crosshair.setAttribute("visibility", "hidden");
+        marker.setAttribute("visibility", "hidden");
+      } else {
+        const [px, py] = chart.xy[index];
+        crosshair.setAttribute("x1", px);
+        crosshair.setAttribute("x2", px);
+        crosshair.setAttribute("visibility", "visible");
+        marker.setAttribute("cx", px);
+        marker.setAttribute("cy", py);
+        marker.setAttribute("visibility", "visible");
+      }
+      renderReadout();
+    }
+
+    // The line above the chart: the pointed-at price, or the range's change.
+    function renderReadout() {
+      const readout = document.getElementById("readout");
+      readout.textContent = "";
+      if (!chart) return;
+
+      const strong = document.createElement("strong");
+      const when = document.createElement("span");
+      when.className = "when";
+
+      if (hoverIndex === null) {
+        const first = chart.shown[0].priceCents;
+        const change = formatChange(chart.diff, (chart.diff / first) * 100);
+        strong.textContent = change.text;
+        strong.className = change.color;
+        when.textContent = ` ${RANGES[range].label}`;
+      } else {
+        const point = chart.shown[hoverIndex];
+        strong.textContent = formatMoney(point.priceCents);
+        const listings = point.listings === null ? "" : ` · ${point.listings.toLocaleString()} listings`;
+        when.textContent = ` · ${formatTime(point.recordedAt)}${listings}`;
+      }
+      readout.append(strong, when);
+    }
+
+    // ---------- The table under the chart ----------
+
+    const TABLE_LIMIT = 200;
+
+    function renderTable() {
+      const shown = pointsInRange();
+      document.getElementById("history-summary").textContent =
+        `Price table (${RANGES[range].label}, ${shown.length} ${shown.length === 1 ? "price" : "prices"})`;
+
+      const newestFirst = shown.slice().reverse().slice(0, TABLE_LIMIT);
+      const rows = newestFirst.map((p) => `
+        <tr>
+          <td>${formatTime(p.recordedAt)}</td>
+          <td>${formatMoney(p.priceCents)}</td>
+          <td>${p.listings === null ? "—" : p.listings.toLocaleString()}</td>
+        </tr>`).join("");
+      const note = shown.length > TABLE_LIMIT
+        ? `<p class="table-note">Showing the newest ${TABLE_LIMIT} of ${shown.length}.</p>`
+        : "";
+      document.getElementById("history-body").innerHTML = shown.length === 0
+        ? `<p class="table-note">No prices in this range.</p>`
+        : `<table>
+             <thead><tr><th>Checked</th><th>Lowest listing</th><th>Listings</th></tr></thead>
+             <tbody>${rows}</tbody>
+           </table>${note}`;
+    }
+
+    // ---------- What we've saved from Steam ----------
+
+    function renderStats() {
+      const { skin, source } = data;
+      const latest = points[points.length - 1];
+      let lowest = points[0];
+      let highest = points[0];
+      for (const p of points) {
+        if (p.priceCents < lowest.priceCents) lowest = p;
+        if (p.priceCents > highest.priceCents) highest = p;
+      }
+
+      const stats = [
+        {
+          label: "Lowest listing",
+          value: formatMoney(latest.priceCents),
+          note: "The cheapest one for sale at the last check",
+        },
+        {
+          label: "Listings for sale",
+          value: latest.listings === null ? "—" : latest.listings.toLocaleString(),
+          note: latest.listings === null ? "Saved from the next update on" : "At the last check",
+        },
+        {
+          label: "Lowest we've seen",
+          value: formatMoney(lowest.priceCents),
+          note: formatTime(lowest.recordedAt),
+        },
+        {
+          label: "Highest we've seen",
+          value: formatMoney(highest.priceCents),
+          note: formatTime(highest.recordedAt),
+        },
+        {
+          label: "Times checked",
+          value: points.length.toLocaleString(),
+          note: `Since ${formatTime(points[0].recordedAt)}`,
+        },
+        {
+          label: "Rarity",
+          value: skin.itemType ?? "—",
+          dot: /^[0-9a-f]{6}$/i.test(skin.rarityColor ?? "") ? `#${skin.rarityColor}` : null,
+          note: skin.itemType ? "From Steam" : "Saved from the next update on",
+        },
+      ];
+
+      document.getElementById("stats").innerHTML = stats.map((s) => `
+        <div class="stat">
+          <div class="stat-label">${escapeHtml(s.label)}</div>
+          <div class="stat-value">${s.dot ? `<span class="rarity-dot" style="background:${s.dot}"></span>` : ""}${escapeHtml(s.value)}</div>
+          <div class="stat-note">${escapeHtml(s.note)}</div>
+        </div>`).join("");
+
+      document.getElementById("source-name").textContent = source.name;
+      document.getElementById("source-link").href = source.itemUrl;
+    }
+
+    // ---------- Loading the data ----------
+
+    // Show a message instead of the skin (for example "not found"), or go
+    // back to showing the skin. Hiding keeps the page's parts in place, so the
+    // next refresh can fill them in again.
+    function showMessage(html) {
+      const message = document.getElementById("page-message");
+      message.innerHTML = html;
+      message.hidden = false;
+      document.getElementById("content").hidden = true;
+    }
+    function showContent() {
+      document.getElementById("page-message").hidden = true;
+      document.getElementById("content").hidden = false;
+    }
+
+    async function load() {
+      let response;
+      try {
+        response = await fetch(`/api/skins/${skinId}`);
+      } catch (error) {
+        if (data) {
+          renderStatus(points[points.length - 1].recordedAt, data.updater, true);
+        } else {
+          showMessage(`Couldn't reach the Skindex server. Is <code>npm run web</code> still running?`);
+        }
+        return;
+      }
+
+      if (response.status === 404) {
+        showMessage(`There's no skin with this address. <a href="/">Back to all skins</a>`);
+        return;
+      }
+      if (!response.ok) {
+        showMessage(`Something went wrong loading this skin (HTTP ${response.status}).`);
+        return;
+      }
+
+      data = await response.json();
+      points = data.history.map((p) => ({ ...p, t: parseSqliteTime(p.recordedAt).getTime() }));
+
+      if (points.length === 0) {
+        showMessage(`No prices saved for this skin yet. <a href="/">Back to all skins</a>`);
+        return;
+      }
+
+      showContent(); // before drawing, so the chart can measure its size
+      renderHeader();
+      renderStatus(points[points.length - 1].recordedAt, data.updater, false);
+      drawChart();
+      renderTable();
+      renderStats();
+    }
+
+    // Range buttons: highlight the one you clicked, then redraw the chart and table.
+    for (const button of document.querySelectorAll("[data-range]")) {
+      button.addEventListener("click", () => {
+        range = button.dataset.range;
+        for (const b of document.querySelectorAll("[data-range]")) {
+          b.setAttribute("aria-pressed", String(b === button));
+        }
+        if (points.length > 0) {
+          drawChart();
+          renderTable();
+        }
+      });
+    }
+
+    // Redraw the chart when the window changes size, so it always fits.
+    new ResizeObserver(() => {
+      if (points.length > 0) drawChart();
+    }).observe(document.getElementById("chart"));
+
+    // Load now, then again every minute.
+    load();
+    setInterval(load, REFRESH_EVERY_MS);
+  </script>
+</body>
+</html>
