@@ -33,9 +33,9 @@
     <div class="controls">
       <input class="search" id="search" type="search" placeholder="Search skins" aria-label="Search skins" autocomplete="off">
       <div class="pills" role="group" aria-label="Sort by">
-        <button type="button" data-sort="name" aria-pressed="true">Name</button>
-        <button type="button" data-sort="price" aria-pressed="false">Price</button>
-        <button type="button" data-sort="change" aria-pressed="false">Biggest change</button>
+        <button type="button" data-sort="name">Name<span class="sort-arrow" aria-hidden="true"></span><span class="sr-only"></span></button>
+        <button type="button" data-sort="price">Price<span class="sort-arrow" aria-hidden="true"></span><span class="sr-only"></span></button>
+        <button type="button" data-sort="change">Biggest change<span class="sort-arrow" aria-hidden="true"></span><span class="sr-only"></span></button>
       </div>
     </div>
 
@@ -51,12 +51,48 @@
     let updater = null; // the server's timer: { updating, nextUpdateAt, lastError }
     let query = "";
     let sortBy = "name";
+    let sortDir = "asc"; // "asc" (ascending: smallest first) or "desc" (descending: biggest first)
+
+    // Each sort button: how it compares two skins (smallest first), which
+    // direction it starts in when you pick it, and how to describe each direction.
+    const SORTS = {
+      name: {
+        compare: (a, b) => a.name.localeCompare(b.name),
+        firstDir: "asc",
+        describe: { asc: "A to Z", desc: "Z to A" },
+      },
+      price: {
+        compare: (a, b) => a.latestCents - b.latestCents,
+        firstDir: "desc",
+        describe: { asc: "lowest price first", desc: "highest price first" },
+      },
+      change: {
+        compare: (a, b) => Math.abs(a.changePercent) - Math.abs(b.changePercent),
+        firstDir: "desc",
+        describe: { asc: "smallest change first", desc: "biggest change first" },
+      },
+    };
 
     function sortSkins(list) {
-      const byName = (a, b) => a.name.localeCompare(b.name);
-      if (sortBy === "price") return list.sort((a, b) => b.latestCents - a.latestCents || byName(a, b));
-      if (sortBy === "change") return list.sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent) || byName(a, b));
-      return list.sort(byName);
+      const { compare } = SORTS[sortBy];
+      const flip = sortDir === "desc" ? -1 : 1;
+      // Skins that tie (same price, say) always stay in A to Z order.
+      return list.sort((a, b) => flip * compare(a, b) || a.name.localeCompare(b.name));
+    }
+
+    // Highlight the selected sort button and show its arrow: ↑ ascending, ↓ descending.
+    function renderSortButtons() {
+      for (const button of document.querySelectorAll("[data-sort]")) {
+        const key = button.dataset.sort;
+        const selected = key === sortBy;
+        button.setAttribute("aria-pressed", String(selected));
+        button.querySelector(".sort-arrow").textContent = selected ? (sortDir === "asc" ? "↑" : "↓") : "";
+        // Screen readers can't see the arrow, so they hear the direction in words instead.
+        button.querySelector(".sr-only").textContent = selected ? `, ${SORTS[key].describe[sortDir]}` : "";
+        button.title = selected
+          ? `Sorted ${SORTS[key].describe[sortDir]}. Click to reverse.`
+          : `Sort by ${button.firstChild.textContent.toLowerCase()}`;
+      }
     }
 
     function lastCheckedAt() {
@@ -120,16 +156,22 @@
       renderList();
     });
 
-    // Sort buttons: highlight the one you clicked and redraw.
+    // Sort buttons: clicking the selected one flips the direction; clicking
+    // another one selects it, starting in its usual direction.
     for (const button of document.querySelectorAll("[data-sort]")) {
       button.addEventListener("click", () => {
-        sortBy = button.dataset.sort;
-        for (const b of document.querySelectorAll("[data-sort]")) {
-          b.setAttribute("aria-pressed", String(b === button));
+        const key = button.dataset.sort;
+        if (key === sortBy) {
+          sortDir = sortDir === "asc" ? "desc" : "asc";
+        } else {
+          sortBy = key;
+          sortDir = SORTS[key].firstDir;
         }
+        renderSortButtons();
         renderList();
       });
     }
+    renderSortButtons();
 
     // Ask our server for the data, then draw the page.
     async function load() {

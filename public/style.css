@@ -112,6 +112,21 @@ header { margin-bottom: 56px; }
   white-space: nowrap;
 }
 .pills button:hover { color: var(--text); }
+.sort-arrow { display: inline-block; margin-left: 5px; }
+.sort-arrow:empty { display: none; }
+
+/* Text only screen readers hear, hidden from view */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
 .pills button[aria-pressed="true"] { background: var(--up); color: #04150d; }
 
 /* Search box */
