@@ -35,7 +35,7 @@
       <div class="pills" role="group" aria-label="Sort by">
         <button type="button" data-sort="name">Name<span class="sort-arrow" aria-hidden="true"></span><span class="sr-only"></span></button>
         <button type="button" data-sort="price">Price<span class="sort-arrow" aria-hidden="true"></span><span class="sr-only"></span></button>
-        <button type="button" data-sort="change">Biggest change<span class="sort-arrow" aria-hidden="true"></span><span class="sr-only"></span></button>
+        <button type="button" data-sort="change">Change<span class="sort-arrow" aria-hidden="true"></span><span class="sr-only"></span></button>
       </div>
     </div>
 
@@ -66,10 +66,12 @@
         firstDir: "desc",
         describe: { asc: "lowest price first", desc: "highest price first" },
       },
+      // The percentage change since the first check, sign included:
+      // +12% sorts above +3%, which sorts above 0%, which sorts above −8%.
       change: {
-        compare: (a, b) => Math.abs(a.changePercent) - Math.abs(b.changePercent),
+        compare: (a, b) => a.changePercent - b.changePercent,
         firstDir: "desc",
-        describe: { asc: "smallest change first", desc: "biggest change first" },
+        describe: { asc: "biggest losers first", desc: "biggest gainers first" },
       },
     };
 
