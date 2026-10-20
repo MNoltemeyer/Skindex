@@ -54,7 +54,21 @@ header { margin-bottom: 56px; }
 .brand { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
 
 /* The big number at the top */
-.hero-label { color: var(--muted); font-size: 15px; font-weight: 500; }
+.hero-label {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.hero-description {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 4px 0 0;
+  max-width: 52ch;
+}
+.hero-description + .hero-value { margin-top: 20px; }
 .hero-value {
   font-size: clamp(40px, 9vw, 56px);
   font-weight: 600;

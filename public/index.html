@@ -20,7 +20,8 @@
     </header>
 
     <section aria-live="polite">
-      <div class="hero-label">AK-47 Field-Tested index</div>
+      <h1 class="hero-label">Full AK-47 Collection (Field-Tested)</h1>
+      <p class="hero-description">Cost to buy the cheapest Field-Tested listing of every AK-47 skin on the Steam Market.</p>
       <div class="hero-value" id="total">—</div>
       <div class="hero-change" id="total-change"></div>
       <div class="hero-meta" id="meta">Loading prices…</div>
@@ -113,7 +114,9 @@
       const changeEl = document.getElementById("total-change");
       changeEl.textContent = `${change.text} since ${formatTime(firstCheck)}`;
       changeEl.className = `hero-change ${change.color}`;
-      document.getElementById("meta").textContent = `Cost of one of each of ${skins.length} skins`;
+      // The description above already explains the total, so this line is
+      // only used for messages like "Loading prices…".
+      document.getElementById("meta").hidden = true;
     }
 
     function renderList() {
